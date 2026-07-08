@@ -57,7 +57,9 @@ MANGA_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
 # (episodes / sources) requests through the proxy.
 OUTBOUND_PROXY = os.getenv("OUTBOUND_PROXY", "").strip()
 OUTBOUND_PROXY_HOSTS = [
-    h.strip() for h in os.getenv("OUTBOUND_PROXY_HOSTS", "owocdn.top").split(",") if h.strip()
+    h.strip()
+    for h in os.getenv("OUTBOUND_PROXY_HOSTS", "owocdn.top,uwucdn.top,kwik.cx").split(",")
+    if h.strip()
 ]
 PIPE_VIA_PROXY = os.getenv("PIPE_VIA_PROXY", "false").lower() in ("1", "true", "yes")
 
@@ -1184,10 +1186,19 @@ async def _proxy_hls(request: Request) -> Response:
     if rng:
         upstream_headers["Range"] = rng
 
-    proxy = _httpx_proxy_for(target_url)
+    # Use curl_cffi with Chrome TLS impersonation (chrome124) — the stream CDNs
+    # (owocdn/uwucdn animepahe vault, kwik.cx, and most others) sit behind
+    # Cloudflare and 403 any client whose JA3/TLS fingerprint isn't a real
+    # browser's. Plain httpx gets blocked; impersonation passes. For hosts that
+    # additionally hard-block by IP range (datacenter), set OUTBOUND_PROXY.
+    proxies = None
+    if _host_needs_proxy(target_url):
+        proxies = {"http": OUTBOUND_PROXY, "https": OUTBOUND_PROXY}
     try:
-        async with httpx.AsyncClient(follow_redirects=True, timeout=25.0, proxy=proxy) as client:
-            resp = await client.get(target_url, headers=upstream_headers)
+        async with AsyncSession(impersonate="chrome124") as client:
+            resp = await client.get(
+                target_url, headers=upstream_headers, proxies=proxies, timeout=25
+            )
     except Exception as e:
         return JSONResponse(
             {"success": False, "message": "Failed to proxy stream", "detail": str(e)},
