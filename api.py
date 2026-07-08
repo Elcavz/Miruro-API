@@ -502,7 +502,8 @@ async def _spotlight() -> list:
     return data.get("Page", {}).get("media", [])
 
 
-async def _schedule(page: int = 1, per_page: int = 20, date: Optional[str] = None) -> dict:
+async def _schedule(page: int = 1, per_page: int = 20, date: Optional[str] = None,
+                    tz_offset: Optional[int] = None) -> dict:
     variables = {"page": page, "perPage": per_page}
     filter_clause = ""
     var_extra = ""
@@ -511,6 +512,14 @@ async def _schedule(page: int = 1, per_page: int = 20, date: Optional[str] = Non
             import datetime
             d = datetime.datetime.strptime(date, "%Y-%m-%d").replace(tzinfo=datetime.timezone.utc)
             start = int(d.timestamp())
+            # `date` is the user's LOCAL calendar day. tz_offset is JS
+            # getTimezoneOffset() (minutes, UTC = local + offset), so shifting
+            # UTC-midnight by it yields the UTC timestamp of the user's local
+            # midnight — the window then matches the local day exactly instead
+            # of a UTC day, so day-boundary episodes aren't dropped/misplaced
+            # for non-UTC users. Falls back to UTC when no offset is given.
+            if tz_offset is not None:
+                start += int(tz_offset) * 60
             end = start + 86400
             variables["airingAtGreater"] = start
             variables["airingAtLesser"] = end
@@ -1442,9 +1451,10 @@ async def api_spotlight():
 
 
 @app.get("/api/schedule")
-async def api_schedule(page: int = 1, per_page: int = 20, date: Optional[str] = None):
+async def api_schedule(page: int = 1, per_page: int = 20, date: Optional[str] = None,
+                       tz_offset: Optional[int] = None):
     try:
-        return ok(await _schedule(page, per_page, date))
+        return ok(await _schedule(page, per_page, date, tz_offset))
     except Exception as e:
         return err(str(e))
 
