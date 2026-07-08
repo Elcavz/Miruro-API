@@ -518,11 +518,16 @@ async def _schedule(page: int = 1, per_page: int = 20, date: Optional[str] = Non
             var_extra = ", $airingAtGreater: Int, $airingAtLesser: Int"
         except Exception:
             pass
+    # With a date the frontend wants EVERY episode airing that day — including
+    # ones that already aired (it renders those greyed-out). notYetAired would
+    # drop them, leaving earlier days of the week empty, so only apply it as the
+    # "upcoming" default when no date range is given.
+    sched_args = filter_clause + ("sort: TIME" if date else "notYetAired: true, sort: TIME")
     gql = f"""
     query ($page: Int, $perPage: Int{var_extra}) {{
         Page(page: $page, perPage: $perPage) {{
             pageInfo {{ total currentPage lastPage hasNextPage perPage }}
-            airingSchedules({filter_clause} notYetAired: true, sort: TIME) {{
+            airingSchedules({sched_args}) {{
                 episode
                 airingAt
                 timeUntilAiring
