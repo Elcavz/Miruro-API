@@ -1736,3 +1736,16 @@ a{color:#38bdf8}
 </div>
 </body>
 </html>"""
+
+
+# ══════════════════════════════════════════════════════════════
+# ENTRYPOINT
+# ══════════════════════════════════════════════════════════════
+# Makes `python api.py` start the server bound to the platform's $PORT on
+# 0.0.0.0, so the app comes up even when the host (e.g. Railway/Nixpacks)
+# launches the module directly instead of via the Dockerfile's uvicorn CMD.
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run("api:app", host="0.0.0.0", port=int(os.getenv("PORT", "8000")))
